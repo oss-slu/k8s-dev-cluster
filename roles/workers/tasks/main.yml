@@ -1,0 +1,17 @@
+---
+# Fetch the join command that was saved on the control plane
+# We delegate this to oss01 since that's where the file lives
+# The content gets stored in the join_command variable
+- name: Get join command from control plane
+  slurp:
+    src: /home/controlnode/join-command.sh
+  delegate_to: oss01
+  register: join_command
+
+# Decode the join command from base64 (slurp returns base64)
+# and run it on each worker node to join the cluster
+# creates: makes this idempotent - skips if node already joined
+- name: Join worker to cluster
+  shell: "{{ join_command.content | b64decode }}"
+  args:
+    creates: /etc/kubernetes/kubelet.conf

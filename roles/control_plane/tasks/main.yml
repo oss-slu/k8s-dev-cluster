@@ -1,0 +1,56 @@
+---
+# Initialize the Kubernetes control plane
+# creates: makes this idempotent - skips if already initialized
+- name: Initialize Kubernetes control plane
+  shell: kubeadm init --pod-network-cidr=10.244.0.0/16
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+# Create .kube directory for controlnode user
+- name: Create .kube directory
+  file:
+    path: /home/controlnode/.kube
+    state: directory
+    owner: controlnode
+    group: controlnode
+    mode: '0755'
+
+# Copy admin kubeconfig so kubectl works as controlnode
+- name: Copy kubeconfig to controlnode home
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/controlnode/.kube/config
+    remote_src: yes
+    owner: controlnode
+    group: controlnode
+    mode: '0600'
+
+# Wait for API server to be ready before applying CNI
+- name: Wait for API server to be ready
+  become: false
+  shell: kubectl get nodes
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+  register: result
+  until: result.rc == 0
+  retries: 15
+  delay: 10
+
+# Install Flannel CNI so pods can communicate across nodes
+- name: Install Flannel CNI
+  become: false
+  shell: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+
+# Generate a fresh join command for worker nodes
+- name: Get join command
+  shell: kubeadm token create --print-join-command
+  register: join_command
+
+# Save join command locally so workers role can use it
+- name: Save join command to file
+  copy:
+    content: "{{ join_command.stdout }}"
+    dest: /home/controlnode/join-command.sh
+    mode: '0755'

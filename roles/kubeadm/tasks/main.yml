@@ -1,0 +1,64 @@
+---
+# Install packages that apt needs to work over HTTPS
+# and to handle GPG keys for the Kubernetes repo
+- name: Install dependencies
+  apt:
+    name:
+      - apt-transport-https  # allows apt to use HTTPS repos
+      - ca-certificates      # SSL certificate verification
+      - curl                 # for downloading the GPG key
+      - gpg                  # for verifying the repo signature
+    state: present
+    update_cache: yes
+
+# /etc/apt/keyrings is where we store trusted GPG keys
+# for third party repositories like Kubernetes
+- name: Create keyrings directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'  # readable by all users, writable only by root
+
+# Download and convert the Kubernetes GPG key
+# This key proves the packages we download are actually from Kubernetes
+# 'creates:' makes this idempotent - skip if key already exists
+- name: Add Kubernetes apt key
+  shell: |
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | \
+    gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+# Tell apt where to find Kubernetes packages
+# signed-by ties this repo to the GPG key we just downloaded
+# so apt won't install packages that aren't signed by Kubernetes
+- name: Add Kubernetes apt repository
+  copy:
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /
+
+# Install the three core Kubernetes tools:
+# kubelet  - runs on every node, manages containers on that node
+# kubeadm  - used to bootstrap and join nodes to the cluster
+# kubectl  - CLI tool to interact with the cluster (like git for k8s)
+- name: Install kubelet kubeadm kubectl
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    update_cache: yes  # refresh apt cache to pick up the new k8s repo
+
+# Pin these packages so a routine 'apt upgrade' doesn't accidentally
+# upgrade Kubernetes to a version that breaks your cluster
+# Kubernetes upgrades should always be intentional and controlled
+- name: Hold kubelet kubeadm kubectl at current version
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl

@@ -1,0 +1,30 @@
+---
+- name: Prepare all nodes
+  hosts: all
+  become: true
+  roles:
+    - common
+    - containerd
+    - kubeadm
+
+
+- name: Bootstrap control plane
+  hosts: control_plane
+  become: true
+  roles:
+    - control_plane
+
+
+- name: Join worker nodes
+  hosts: workers
+  become: true
+  tags: workers
+  roles:
+    - workers
+
+- name: Deploy operators
+  hosts: control_plane
+  become: false
+  tags: operators
+  roles:
+    - operators
