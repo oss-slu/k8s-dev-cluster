@@ -1,0 +1,5 @@
+server:
+  insecure: true
+  extraArgs:
+    - --rootpath=/argocd
+
