@@ -1,0 +1,7 @@
+grafana:
+  adminPassword: admin123
+  grafana.ini:
+    server:
+      domain: 10.60.63.1
+      root_url: http://10.60.63.1:30080/grafana
+      serve_from_sub_path: true
