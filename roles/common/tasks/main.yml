@@ -1,7 +1,11 @@
+# SWAP MANAGEMENT
+# Kubernetes requires swap to be disabled for proper memory management
+# See: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 - name: Disable swap
   command: swapoff -a
   when: ansible_swaptotal_mb > 0
 
+# Persist swap disablement across reboots by commenting it out in fstab
 - name: Remove swap from fstab
   lineinfile:
     path: /etc/fstab
@@ -9,6 +13,10 @@
     line: '# \0'
     backrefs: yes
 
+# KERNEL MODULE CONFIGURATION
+# Load container networking kernel modules required for Kubernetes networking
+# overlay:     Container image filesystem 
+# br_netfilter: Enables bridge network filtering for iptables/netfilter rules
 - name: Load kernel modules config
   copy:
     dest: /etc/modules-load.d/k8s.conf
@@ -16,6 +24,7 @@
       overlay
       br_netfilter
 
+# Load kernel modules immediately (without waiting for reboot)
 - name: Load modules now
   modprobe:
     name: "{{ item }}"
@@ -23,6 +32,8 @@
     - overlay
     - br_netfilter
 
+# NETWORKING CONFIGURATION
+# Configure system parameters required for Kubernetes pod networking and routing
 - name: Set sysctl params
   copy:
     dest: /etc/sysctl.d/k8s.conf
@@ -31,5 +42,6 @@
       net.bridge.bridge-nf-call-ip6tables = 1
       net.ipv4.ip_forward                 = 1
 
+# Apply sysctl changes immediately without rebooting
 - name: Apply sysctl
   command: sysctl --system
