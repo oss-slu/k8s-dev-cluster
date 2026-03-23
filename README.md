@@ -3,10 +3,10 @@
 4-node Kubernetes cluster automation using Ansible.
 
 ## Nodes
-- oss01 - Control Plane (10.60.63.1)
-- oss02 - Worker (10.60.63.2)
-- oss03 - Worker (10.60.63.5)
-- oss04 - Worker (10.60.63.6)
+- oss01 - Control Plane 
+- oss02 - Worker
+- oss03 - Worker 
+- oss04 - Worker
 
 ## Stack
 - Kubernetes 1.32
