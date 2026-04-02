@@ -1,5 +1,5 @@
 grafana:
-  adminPassword: admin123
+  adminPassword: 
   grafana.ini:
     server:
       domain: 10.60.63.1
