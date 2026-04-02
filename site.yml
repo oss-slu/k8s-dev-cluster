@@ -7,13 +7,11 @@
     - containerd
     - kubeadm
 
-
 - name: Bootstrap control plane
   hosts: control_plane
   become: true
   roles:
     - control_plane
-
 
 - name: Join worker nodes
   hosts: workers
@@ -28,3 +26,17 @@
   tags: operators
   roles:
     - operators
+
+- name: Install ingress controller
+  hosts: control_plane
+  become: false
+  tags: ingress
+  roles:
+    - ingress
+
+- name: Apply security hardening
+  hosts: control_plane
+  become: true
+  tags: security
+  roles:
+    - security

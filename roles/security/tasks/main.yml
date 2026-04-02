@@ -1,0 +1,91 @@
+---
+# ============================================
+# API Server Hardening
+# ============================================
+
+- name: Ensure audit log directory exists
+  file:
+    path: /var/log/kubernetes
+    state: directory
+    mode: '0750'
+  tags: apiserver
+
+- name: Copy API server manifest with hardened settings
+  template:
+    src: kube-apiserver.yaml.j2
+    dest: /etc/kubernetes/manifests/kube-apiserver.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  tags: apiserver
+
+- name: Wait for API server to restart
+  become: false
+  shell: kubectl get nodes
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+  register: result
+  until: result.rc == 0
+  retries: 30
+  delay: 10
+  tags: apiserver
+
+# ============================================
+# Calico Network Policy Enforcement
+# ============================================
+
+- name: Install Calico for network policy enforcement
+  become: false
+  shell: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico-policy-only.yaml
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+  tags: calico
+
+- name: Wait for Calico pods to be ready
+  become: false
+  shell: kubectl wait --for=condition=ready pods -l k8s-app=calico-node -n kube-system --timeout=120s
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+  register: calico_result
+  retries: 3
+  delay: 10
+  until: calico_result.rc == 0
+  tags: calico
+
+# ============================================
+# Etcd Backup
+# ============================================
+
+- name: Install etcd client
+  apt:
+    name: etcd-client
+    state: present
+  tags: etcd-backup
+
+- name: Create etcd backup directory
+  file:
+    path: /var/backups/etcd
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  tags: etcd-backup
+
+- name: Create etcd backup cron script
+  copy:
+    dest: /etc/cron.daily/etcd-backup
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      ETCDCTL_API=3 etcdctl snapshot save /var/backups/etcd/etcd-backup-$(date +%Y%m%d).db \
+        --endpoints=https://127.0.0.1:2379 \
+        --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+        --cert=/etc/kubernetes/pki/etcd/server.crt \
+        --key=/etc/kubernetes/pki/etcd/server.key
+      # Keep only last 7 days
+      find /var/backups/etcd -name "etcd-backup-*.db" -mtime +7 -delete
+  tags: etcd-backup
+
+- name: Run initial etcd backup
+  shell: /etc/cron.daily/etcd-backup
+  tags: etcd-backup

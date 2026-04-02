@@ -107,3 +107,50 @@
       --wait --timeout 5m
   environment:
     KUBECONFIG: /home/controlnode/.kube/config
+
+
+- name: Add MongoDB Helm repo
+  become: false
+  shell: helm repo add mongodb https://mongodb.github.io/helm-charts
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+
+- name: Update Helm repos
+  become: false
+  shell: helm repo update
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+
+- name: Create mongodb namespace
+  become: false
+  shell: kubectl create namespace mongodb --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+
+- name: Copy mongodb values
+  copy:
+    src: mongodb-values.yaml
+    dest: /tmp/mongodb-values.yaml
+
+- name: Install MongoDB Community Operator
+  become: false
+  shell: |
+    helm upgrade --install mongodb-operator mongodb/community-operator \
+      --namespace mongodb \
+      --values /tmp/mongodb-values.yaml \
+      --wait --timeout 5m
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+- name: Install local-path-provisioner
+  become: false
+  shell: |
+    kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+
+- name: Set local-path as default StorageClass
+  become: false
+  shell: |
+    kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config

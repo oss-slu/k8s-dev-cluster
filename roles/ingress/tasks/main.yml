@@ -1,0 +1,34 @@
+---
+- name: Add Nginx Ingress Helm repo
+  become: false
+  shell: helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+  tags: ingress
+
+- name: Update Helm repos
+  become: false
+  shell: helm repo update
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+  tags: ingress
+
+- name: Create ingress-nginx namespace
+  become: false
+  shell: kubectl create namespace ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+  tags: ingress
+
+- name: Install Nginx Ingress Controller
+  become: false
+  shell: |
+    helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+      --namespace ingress-nginx \
+      --set controller.service.type=NodePort \
+      --set controller.service.nodePorts.http=30080 \
+      --set controller.service.nodePorts.https=30443 \
+      --wait --timeout 5m
+  environment:
+    KUBECONFIG: /home/controlnode/.kube/config
+  tags: ingress
