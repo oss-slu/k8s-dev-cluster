@@ -1,1 +1,22 @@
-# No custom values yet — placeholder for future config
+# CloudNativePG operator Helm values
+# Chart: cnpg/cloudnative-pg
+# Installed version: 0.27.1 (app 1.28.1) — pin matches roles/operators/tasks/main.yml
+#
+# Why this file exists:
+# The chart default startup probe is failureThreshold=6, periodSeconds=5, which
+# gives the operator 30 seconds to bind its webhook port (9443) before kubelet
+# kills it. On this cluster that wasn't enough — the apiserver is unstable
+# (unrelated root cause, tracked separately) and the operator routinely got
+# killed mid-init in a tight loop. 4509 restarts over 18 days before this was
+# caught on 2026-04-09.
+#
+# Loosening to failureThreshold=30 gives ~2.5 minutes (30 * 5s) to come up.
+# This survives apiserver hiccups without masking real startup failures — if
+# the operator genuinely can't start, kubelet still catches it, just later.
+#
+# Remove this override only after the apiserver instability is root-caused
+# and fixed.
+webhook:
+  startupProbe:
+    failureThreshold: 30
+    periodSeconds: 5
