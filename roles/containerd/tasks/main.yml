@@ -24,3 +24,42 @@
     name: containerd
     state: restarted
     enabled: yes
+
+# CNI plugin pack (bridge, host-local, loopback, portmap, etc.)
+#
+# Why: kubeadm + Flannel + Calico policy-only all depend on the standard
+# containernetworking/plugins binaries in /opt/cni/bin. These are normally
+# provided by the container runtime package, but on this cluster some nodes
+# were missing them after a microk8s snap purge (2026-04-08). Installing from
+# the upstream release tarball gives us a predictable, versioned set on every
+# node.
+#
+# Note: this does not normalize existing drift between nodes — it only ensures
+# a fresh node gets the right binaries. Existing nodes with extra or different
+# plugin sets are left alone because the `creates:` guard makes this a no-op
+# when /opt/cni/bin/bridge already exists. CNI drift cleanup is tracked
+# separately.
+
+- name: Ensure CNI plugin directory exists
+  file:
+    path: /opt/cni/bin
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Download CNI plugins tarball
+  get_url:
+    url: https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+    dest: /tmp/cni-plugins-v1.4.0.tgz
+    checksum: sha256:c2485ddb3ffc176578ae30ae58137f0b88e50f7c7f2af7d53a569276b2949a33
+    mode: '0644'
+
+- name: Install CNI plugins
+  unarchive:
+    src: /tmp/cni-plugins-v1.4.0.tgz
+    dest: /opt/cni/bin/
+    remote_src: yes
+    owner: root
+    group: root
+    creates: /opt/cni/bin/bridge
