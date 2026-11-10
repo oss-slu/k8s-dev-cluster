@@ -31,12 +31,42 @@
   tags: apiserver
 
 # ============================================
-# Calico Network Policy Enforcement
+# Calico CNI (pod networking + IPAM + NetworkPolicy)
 # ============================================
-
-- name: Install Calico for network policy enforcement
+# Full Calico, not the policy-only manifest this used to apply -
+# oss_infra_ops#151, see docs/software-baseline-audit.md. The live
+# cluster runs Calico as its actual CNI (confirmed: calico-node
+# DaemonSet, a real IPPool CRD, zero Flannel anywhere) - the
+# policy-only manifest assumes a separate primary CNI (originally
+# Flannel, installed by control_plane's role - now removed) handles
+# pod networking/IPAM, which no longer matches reality and would leave
+# a freshly-provisioned node with no actual CNI at all.
+#
+# calico.yaml's own default pool CIDR (192.168.0.0/0) doesn't match
+# this cluster's real pod-network-cidr (10.244.0.0/16, set by
+# control_plane's `kubeadm init`) - download then patch it, same
+# pattern as any other "apply a stock manifest with one value
+# overridden" step, rather than hand-maintaining a full forked copy of
+# upstream's Calico manifest.
+- name: Download Calico manifest
   become: false
-  shell: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico-policy-only.yaml
+  get_url:
+    url: https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
+    dest: /tmp/calico.yaml
+    mode: '0644'
+  tags: calico
+
+- name: Patch Calico's default pool CIDR to match kubeadm's --pod-network-cidr
+  become: false
+  replace:
+    path: /tmp/calico.yaml
+    regexp: '^(\s*# )?- name: CALICO_IPV4POOL_CIDR\n(\s*# )?  value: ".*"'
+    replace: '            - name: CALICO_IPV4POOL_CIDR\n              value: "10.244.0.0/16"'
+  tags: calico
+
+- name: Install Calico (CNI + IPAM + NetworkPolicy)
+  become: false
+  shell: kubectl apply -f /tmp/calico.yaml
   environment:
     KUBECONFIG: /home/controlnode/.kube/config
   tags: calico
