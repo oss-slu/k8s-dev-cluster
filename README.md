@@ -5,7 +5,7 @@
 ## Nodes
 - oss01 - Control Plane 
 - oss02 - Worker
-- oss03 - Worker 
+- oss05 - Worker
 - oss04 - Worker
 
 ## Stack
