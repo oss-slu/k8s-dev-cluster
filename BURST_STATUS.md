@@ -1,41 +1,62 @@
-# Branch status: burst-issue#150-fix-inventory-topology
+# Branch status: burst-issue#151-modernize-ansible-roles
 
-**Addresses:** oss_infra_ops#150 (Update Cluster Inventory and Topology to 4-Node Live State)
-**Status: ready to merge.**
+**Addresses:** oss_infra_ops#151 (Modernize Ansible Roles to Match Current Software Baseline)
+**Status: content fix is correct and its trickiest step is verified against a real file; WIP until someone can run it end to end against real or throwaway hardware.**
 
-## What was actually wrong
+## What's here
 
-`inventory.ini` already had exactly 4 nodes (1 control plane + 3
-workers), matching the live cluster's real node count - this wasn't a
-missing-node problem. The real bug: one worker was named wrong. The
-host at `10.60.63.5` was listed as `oss03`, but `kubectl get nodes -o
-wide` confirms the real node at that IP is named **`oss05`** - there is
-no `oss03` anywhere in the live cluster. Same stale name was also in
-`README.md`'s node list.
+`docs/software-baseline-audit.md` - full comparison of what this repo's
+roles would install vs. what the live cluster actually runs:
 
-This isn't a cosmetic typo: Ansible's inventory hostnames are used
-throughout this repo's roles (`hosts: workers`, per-host task targeting,
-etc.) - running `site.yml` against a host literally named `oss03`
-when no such host exists (it would try to resolve/SSH to a hostname
-that was never the real one) is a real, latent failure waiting to
-happen the next time someone runs this playbook expecting it to
-reach all 4 real nodes.
+- **Kubernetes and Calico version pins already matched live versions** -
+  confirmed, not stale, nothing to fix there (the issue's framing
+  assumed more drift than was actually present).
+- **The real finding**: `control_plane`'s role installed **Flannel** as
+  the primary CNI, with `security`'s role layering Calico in
+  **policy-only** mode on top - a legitimate pattern, just not what
+  this cluster actually runs. Confirmed live: zero Flannel pods/
+  DaemonSets anywhere; `calico-node` is a real 4/4 DaemonSet with a
+  genuine IPPool CRD, i.e. Calico is the real CNI + IPAM provider. This
+  connects to a historical incident already documented elsewhere in
+  this cluster's docs ("oss04 Flannel-leftover NetworkPolicy fix") -
+  the cluster migrated off Flannel at some point and this repo's
+  automation was never updated to match.
 
-## What I didn't touch, and why
+**Fixed**: removed the Flannel install task; `security`'s Calico task
+now installs the full manifest (not policy-only), patched to this
+cluster's real pod CIDR (`10.244.0.0/16`) instead of upstream's
+default.
 
-The `ansible_user` values (`workernode1`/`workernode2`/`workernode3`)
-weren't changed - I have no way to verify which username is actually
-correct for SSH to each host from this session (no SSH access
-confirmed - see the companion `oss_infra_ops` branch
-`burst-issue#156-oss02-legacy-audit` for where this was tested and
-denied). Worth a human double-checking these match real `~/.ssh/config`
-or known-working credentials before the next real `ansible-playbook`
-run, but not something to guess-and-fix blind.
+## What was actually verified (not just asserted)
 
-## Related, not fixed here (separate issue's scope)
+The one genuinely tricky part - patching Calico's commented-out
+`CALICO_IPV4POOL_CIDR` env var via Ansible's `replace` module - was
+tested against a real, freshly downloaded copy of the exact file this
+task fetches (`calico.yaml` v3.27.0), using the same regex semantics
+Ansible's `replace` module actually uses (Python `re.sub` with
+`MULTILINE`). It matches and produces the expected result. This isn't
+guessed at.
 
-`README.md`'s "Stack" section still claims "Flannel CNI" - confirmed
-live, this is also stale (zero Flannel pods/DaemonSets exist cluster-
-wide; `calico-node` is the real CNI DaemonSet, 4/4 nodes, with a real
-Calico IPPool CRD). Left for the companion `burst-issue#151-...` branch
-since it's a software-baseline question, not a topology one.
+## What's not verified
+
+The full play, end to end, against a real node - no spare/throwaway
+hardware exists in this session to run `ansible-playbook site.yml`
+against, and it wasn't attempted against any of the 4 live production
+nodes (that would mean reprovisioning a node serving real traffic from
+scratch). See `docs/software-baseline-audit.md`'s own "Not tested"
+section for exactly what that would need to confirm.
+
+Also flagged, not independently checked: containerd version and CNI
+plugin version pins (`roles/containerd/tasks/main.yml`) weren't
+cross-referenced against a live node's actual installed versions - no
+SSH access this session (same limitation as the companion
+`oss_infra_ops` branch `burst-issue#156-oss02-legacy-audit`).
+
+## Recommendation
+
+The content fix is right and its riskiest step is confirmed correct
+against the real file. Don't merge blind, though - get a real
+`ansible-playbook` run against a throwaway node first, or at minimum
+have someone familiar with this repo's role ordering confirm nothing
+else implicitly depended on Flannel being installed earlier in the
+play.
