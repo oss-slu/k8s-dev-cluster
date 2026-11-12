@@ -5,12 +5,14 @@
 ## Nodes
 - oss01 - Control Plane 
 - oss02 - Worker
-- oss03 - Worker 
+- oss05 - Worker
 - oss04 - Worker
 
 ## Stack
 - Kubernetes 1.32
-- Flannel CNI
+- Calico CNI (full CNI + IPAM, not just NetworkPolicy - see
+  docs/software-baseline-audit.md for why this replaces the "Flannel
+  CNI" this README used to claim)
 - Prometheus + Grafana
 - ArgoCD
 - CloudNativePG
