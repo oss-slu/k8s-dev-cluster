@@ -1,3 +1,11 @@
+# PRE-FLIGHT HOST ASSERTION
+# Prevent cross-node command targeting per oss_infra_ops runbook #158
+- name: Verify target host matches inventory hostname
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname == ansible_hostname
+    fail_msg: "Target host mismatch! Inventory expects '{{ inventory_hostname }}' but connected to '{{ ansible_hostname }}'"
+
 # SWAP MANAGEMENT
 # Kubernetes requires swap to be disabled for proper memory management
 # See: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
